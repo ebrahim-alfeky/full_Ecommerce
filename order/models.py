@@ -1,0 +1,96 @@
+from django.db import models
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+from django.contrib.auth import get_user_model
+User = get_user_model()
+from django.conf import settings
+from product.models import ProductVariant
+import uuid
+from django.core.exceptions import ObjectDoesNotExist
+
+
+class Order(models.Model):
+    PAID_STATUS = [
+        ('pending', 'Pending'),
+        ('unpaid', 'Unpaid'),
+        ('paid', 'Paid'),
+        ('expired', 'Expired'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='orders')
+    payment_method = models.CharField(
+        max_length=20,
+        choices=getattr(settings, "AVAILABLE_PAYMENT_METHODS",[
+        ("COD", "Cash on Delivery"),
+        ("EPAY", "E-payment"),
+        ]),
+        default="EPAY"
+    )
+    payment_status = models.CharField(max_length=20, choices=PAID_STATUS, default='unpaid')
+    is_paid = models.BooleanField(default=False)
+    paid_at = models.DateTimeField(blank=True, null=True)
+    total_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    currency = models.CharField(max_length=3, default="EGP", editable=False)
+    order_number = models.CharField(max_length=20, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    def save(self, *args, **kwargs):
+        if not self.order_number:
+            import datetime
+            today = datetime.date.today().strftime("%Y%m%d")
+            random_code = uuid.uuid4().hex[:6].upper()
+            self.order_number=f'ORD-{today}-{random_code}'
+        super().save(*args, **kwargs)
+    def __str__(self):
+        username = self.user.username if self.user else "Deleted user"
+        return f'Order {self.order_number} - {username} - {self.payment_status}'
+    def calculate_total(self):
+        total = sum(item.subtotal for item in self.items.all())
+        self.total_price = total
+        self.save()
+        return self.total_price
+    def set_status(self, new_status: str):
+        if new_status == 'expired' and self.payment_status != 'expired':
+            for item in self.items.all():
+                if item.product:
+                    try:
+                        stock = item.product.stock
+                    except ObjectDoesNotExist:
+                        continue
+                    stock.quantity += item.quantity
+                    stock.save(update_fields=["quantity"])
+        if new_status == "paid":
+            self.is_paid = True
+            from django.utils import timezone
+            self.paid_at = timezone.now()
+        self.payment_status = new_status
+        self.save()
+
+class OrderAddress(models.Model):
+    order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name="shipping_address")
+    label = models.CharField(max_length=100)
+    full_name = models.CharField(max_length=100)
+    phone = models.CharField(max_length=20)
+    street = models.CharField(max_length=255)
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=100, blank=True, null=True)
+    postal_code = models.CharField(max_length=20, blank=True, null=True)
+    country = models.CharField(max_length=100, default="Egypt")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.label} - {self.full_name}, {self.city}"
+
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
+    product = models.ForeignKey(ProductVariant, on_delete=models.SET_NULL, null=True)
+    p_name = models.CharField(max_length=200)
+    p_description = models.TextField(blank=True, null=True)
+    variant_name = models.CharField(max_length=100)
+    p_image = models.ImageField(upload_to='products/', null=True, blank=True)
+    quantity = models.PositiveIntegerField(default=1)
+    price_at_purchase = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    def __str__(self):
+        return f"{self.quantity} × {self.product.name if self.product else 'Deleted product'}"
+    @property
+    def subtotal(self):
+        return self.price_at_purchase * self.quantity
