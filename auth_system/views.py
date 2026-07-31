@@ -18,6 +18,9 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 import requests
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 User = get_user_model()
 
@@ -648,3 +651,11 @@ class CurrentUserAPIView(APIView):
     def get(self, request):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
+    
+@api_view(["GET"])
+@ensure_csrf_cookie
+def get_csrf(request): # Csrf Token
+    """
+    Call this once on app load to ensure csrftoken cookie is set.
+    """
+    return Response({"detail": "CSRF cookie set"})

@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'cart',
     'order',
     'payment',
+    'reviews',
     'django_celery_beat',
     'django_celery_results',
     
@@ -53,6 +54,7 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = 'auth_system.CustomUser'
 
 MIDDLEWARE = [
+    "auth_system.authentication.CSRFMiddlewareWithJWT",
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -217,7 +219,7 @@ ORDER_EXPIRE_MINUTES = 15  # 15 دقيقة
 COOLING_PERIOD_AFTER_EXPIRY = 10 # 10 دقيقة
 COD_ORDER_EXPIRE_DAYS = 3  # 3 أيام
 
-PAYMOB_INTEGRATION_ID = 5492078
+PAYMOB_INTEGRATION_ID = config("PAYMOB_INTEGRATION_ID")
 PAYMOB_SECRET_KEY = config("PAYMOB_SECRET_KEY")
 PAYMOB_PUBLIC_KEY = config("PAYMOB_PUBLIC_KEY")
 PAYMOB_REDIRECTION_URL = config("PAYMOB_REDIRECTION_URL")
@@ -227,3 +229,34 @@ PAYMOB_PAYMENT_METHODS = [
     "online card"
 ] # طرق الدفع المدعومة في Paymob
 PAYMOB_HMAC_TOKEN = config("PAYMOB_HMAC_TOKEN")
+
+
+
+# CSRF
+CSRF_COOKIE_NAME = "csrftoken"        # الاسم الافتراضي
+CSRF_COOKIE_SECURE = True             # فقط HTTPS في production
+CSRF_COOKIE_HTTPONLY = False          # لازم يكون False عشان JS يقدر يقرأ الكوكي
+CSRF_COOKIE_SAMESITE = "Lax"          # أو "Strict" حسب حاجتك
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8000",       # دومين الواجهة الأمامية
+]
+
+import re
+
+CSRF_EXEMPT_URL_PATTERNS = [
+    # Payment
+    re.compile(r"^/payment/paymob-callback/?$"),
+    
+    # Auth
+    re.compile(r"^/auth/register/?$"),
+    re.compile(r"^/auth/login/?$"),
+    re.compile(r"^/auth/google-login/?$"),
+    
+    re.compile(r"^/auth/refresh-access-token/?$"),
+    re.compile(r"^/auth/verify-access-token/?$"),
+    
+    re.compile(r"^/auth/password-reset-link/?$"),
+    re.compile(r"^/auth/password-reset-confirm/?$"),
+    
+    re.compile(r"^/auth/logout/?$"),
+]

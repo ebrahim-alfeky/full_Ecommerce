@@ -18,4 +18,5 @@ urlpatterns = [
     path('verify-change-email/', VerifyChangeEmailView.as_view(), name='verify-change-email'),
     path('google-login/', GoogleLoginAPIView.as_view(), name='google-login'),
     path('me/', CurrentUserAPIView.as_view(), name='current-user'),
+    path('csrf/', get_csrf, name='get_csrf'),
 ]
